@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>칠판 열기 [개인용]</title>
+<script>
+/* ▼ Apps Script 웹 앱 주소(…/exec로 끝나는 주소)를 따옴표 안에 붙여 넣으세요 */
+var GAS_URL = '';
+</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23121417'/%3E%3Cpath d='M14 19c6-2.4 13-2.1 20 2.4v28c-7-4.5-14-4.8-20-2.4ZM50 19c-6-2.4-13-2.1-20 2.4v28c7-4.5 14-4.8 20-2.4Z' fill='none' stroke='%23FFD84A' stroke-width='4.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* ───────────── 공통 ───────────── */
+:root{
+  --ground:#ECEEF1; --surface:#fff; --ink:#121417; --ink2:#3A3F47; --muted:#5F6672; --faint:#8A9099;
+  --line:#E4E7EB; --line2:#CDD1D7; --soft:#F4F5F7; --hl:#FFD84A; --hl-soft:#FFF6D1; --bad:#C2333B; --ok:#1F9D6B;
+  --sans:'IBM Plex Sans KR','Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif;
+  --mono:'IBM Plex Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--sans);color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;word-break:keep-all;letter-spacing:-.005em}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+[hidden]{display:none!important}
+svg.ic{display:block;flex:none}
+
+/* ───────────── 칠판 열기 (크롬 69: flex gap·inset·clamp()·min() 안 씀) ───────────── */
+html,body{touch-action:pan-x pan-y}
+body{background:#F0F1F3;overflow:auto;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+button:focus{outline:none}
+.otop{position:fixed;top:0;left:0;right:0;height:64px;z-index:5;display:flex;align-items:center;padding:0 24px 0 28px;background:#fff;border-bottom:1px solid var(--line)}
+.otop .mark{width:36px;height:36px;border-radius:10px;background:var(--ink);color:var(--hl);display:flex;align-items:center;justify-content:center;flex:none;margin-right:14px}
+.otop b{font-size:21px;font-weight:800;letter-spacing:-.03em;flex:none}
+.otop small{font-size:14.5px;color:var(--muted);margin-left:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.otop .f{flex:1 1 auto}
+.btn{flex:none;display:inline-flex;align-items:center;height:46px;padding:0 18px;border-radius:12px;border:1px solid var(--line2);background:#fff;font-size:16px;font-weight:700}
+.btn .ic{margin-right:9px}
+.btn+.btn{margin-left:10px}
+.btn:active{background:var(--soft)}
+.omain{padding:64px 0 0;min-height:100%}
+
+/* 처음 화면(주소가 비었을 때) */
+.hero{max-width:1120px;margin:0 auto;padding:12vh 32px 60px;text-align:center}
+.hero h1{margin:0;font-size:46px;font-weight:800;letter-spacing:-.04em;line-height:1.25}
+.hero>p{margin:18px auto 0;max-width:760px;font-size:20px;color:var(--muted);line-height:1.6}
+.hero code{font:600 .92em var(--mono);color:var(--ink);background:var(--hl-soft);padding:1px 6px;border-radius:6px}
+.big{display:inline-flex;align-items:center;height:80px;padding:0 40px;margin-top:36px;border-radius:22px;background:var(--ink);color:#fff;font-size:25px;font-weight:800;letter-spacing:-.02em}
+.big .ic{margin-right:14px}
+
+/* 목록 */
+.lst{max-width:1600px;margin:0 auto;padding:36px 48px 180px}
+.lh{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:20px;margin-bottom:26px;border-bottom:1px solid var(--line)}
+.lhl{min-width:0;flex:1 1 auto}
+.lh small{font-size:15px;font-weight:600;color:var(--muted)}
+.lh .cnt{flex:none;margin-left:20px;padding-bottom:6px;font-size:16px}
+.lh h1{margin:6px 0 0;font-size:40px;font-weight:800;letter-spacing:-.04em;line-height:1.2}
+.crumb{display:flex;flex-wrap:wrap;align-items:center;margin:0 0 0 -10px}
+.crumb button{display:block;height:40px;padding:0 10px;border-radius:10px;font-size:16px;font-weight:600;color:var(--muted);max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb button:active{background:#E4E7EB}
+.crumb i{display:flex;color:var(--faint)}
+.sh{margin:34px 0 14px;font-size:15px;font-weight:700;color:var(--muted)}
+.lh+.sh{margin-top:0}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));grid-gap:16px}
+.fold{display:flex;align-items:center;height:88px;padding:0 16px;border-radius:20px;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(18,20,23,.05);text-align:left}
+.fold:active,.card:active{background:var(--soft)}
+.fold .fic{display:flex;align-items:center;justify-content:center;flex:none;width:52px;height:52px;margin-right:16px;border-radius:14px;background:var(--hl-soft);color:#8A6A00}
+.fold b{flex:1 1 auto;min-width:0;font-size:21px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fold>.ic{color:var(--faint);margin-left:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));grid-gap:22px}
+.card{display:flex;flex-direction:column;align-items:stretch;text-align:left;min-height:230px;padding:22px 26px 20px;border-radius:22px;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(18,20,23,.05)}
+.ct{display:flex;align-items:flex-start;justify-content:space-between}
+.num{font:600 56px/1 var(--mono);letter-spacing:-.04em}
+.num.sm{font-size:40px;line-height:1.15}
+.chip{flex:none;height:34px;padding:0 14px;border-radius:17px;background:var(--ink);color:#fff;font-size:14.5px;font-weight:700;display:inline-flex;align-items:center;margin-left:12px}
+.ttl{margin-top:16px;font-size:23px;font-weight:700;letter-spacing:-.02em;line-height:1.35}
+.sub{margin-top:8px;font-size:15.5px;color:var(--muted)}
+.fn{margin-top:auto;padding-top:16px;font:500 13px var(--mono);color:var(--faint);word-break:break-all}
+.card.pend .ttl{font-size:21px}
+.lock{display:inline-flex;align-items:center;margin-top:26px;padding:12px 20px;border-radius:14px;background:var(--hl-soft);font-size:15.5px;color:var(--ink2);text-align:left;line-height:1.5}
+.lock .ic{color:#B88A00;margin-right:10px;flex:none}
+
+/* 안내 상자(여는 중·오류·빈 폴더) */
+.note{display:flex;flex-direction:column;align-items:center;text-align:center;padding:64px 24px;border-radius:22px;background:#fff;border:1px dashed var(--line2)}
+.note>.ic{color:var(--faint)}
+.note.bad>.ic{color:var(--bad)}
+.note b{margin-top:16px;font-size:22px;font-weight:700;letter-spacing:-.02em}
+.note span{margin-top:10px;max-width:620px;font-size:16px;color:var(--muted);line-height:1.6}
+.note em,.wbox em{margin-top:10px;font-size:15px;font-style:normal;color:var(--faint);opacity:0;-webkit-animation:oshow .4s 4s forwards;animation:oshow .4s 4s forwards}
+.nbtn{display:flex;margin-top:24px}
+.spin{display:block;width:40px;height:40px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--ink);-webkit-animation:ospin .9s linear infinite;animation:ospin .9s linear infinite}
+@-webkit-keyframes ospin{to{-webkit-transform:rotate(360deg);transform:rotate(360deg)}}
+@keyframes ospin{to{-webkit-transform:rotate(360deg);transform:rotate(360deg)}}
+@-webkit-keyframes oshow{to{opacity:1}}
+@keyframes oshow{to{opacity:1}}
+
+/* 오른쪽 아래 버튼(위로·새로 고침) — 칠판 오른쪽에 서서 누르기 쉽게 */
+.ofab{position:fixed;right:24px;bottom:24px;z-index:10}
+.fb{display:flex;flex-direction:column;align-items:center;justify-content:center;width:88px;height:88px;border-radius:24px;background:#fff;border:1px solid var(--line2);box-shadow:0 6px 18px rgba(18,20,23,.12);font-size:14.5px;font-weight:700}
+.fb+.fb{margin-top:12px}
+.fb span{margin-top:6px;white-space:nowrap}
+.fb:active{background:var(--soft)}
+.fb.off{opacity:.35}
+.fb.run .ic{-webkit-animation:ospin 1s linear infinite;animation:ospin 1s linear infinite}
+
+/* 파일 받는 중 */
+.owait{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:25;background:rgba(240,241,243,.88);align-items:center;justify-content:center}
+.owait.on{display:flex}
+.wbox{display:flex;flex-direction:column;align-items:center;text-align:center;width:480px;max-width:90%;padding:36px 32px 28px;border-radius:24px;background:#fff;border:1px solid var(--line);box-shadow:0 18px 50px rgba(18,20,23,.16)}
+.wbox>.ic{color:var(--bad)}
+.wbox b{margin-top:18px;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.35}
+.wbox .wsub{margin-top:8px;font-size:16px;color:var(--muted);line-height:1.55}
+.wbox .nbtn{margin-top:22px}
+
+/* 수업 화면 */
+.oview{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:20;background:#E3E6EA}
+.oview.on{display:block}
+.oview iframe{display:block;width:100%;height:100%;border:0}
+.otoast{display:none;position:fixed;left:50%;bottom:40px;z-index:30;-webkit-transform:translateX(-50%);transform:translateX(-50%);align-items:center;max-width:70%;padding:14px 20px;border-radius:14px;background:var(--ink);color:#fff;font-size:16px;font-weight:600;line-height:1.5}
+.otoast .ic{color:var(--hl);margin-right:10px;flex:none}
+.otoast.on{display:flex}
+@media (max-width:900px){
+  .lst{padding:24px 20px 180px}
+  .lh h1{font-size:32px}
+  .hero h1{font-size:34px}
+  .otop small{display:none}
+  .grid,.fgrid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+}
+</style>
+</head>
+<body>
+<header class="otop"><div class="mark" id="omark"></div><b>칠판 열기</b><small>드라이브 공유 폴더의 수업용 파일을 여는 곳 · 개인용</small><span class="f"></span><button class="btn" data-o="pick" id="ousb"></button><button class="btn" data-o="full" id="ofull"></button></header>
+<main class="omain" id="omain"></main>
+<div class="ofab" id="ofab"></div>
+<div class="oview" id="oview"></div>
+<div class="owait" id="owait"></div>
+<div class="otoast" id="otoast"></div>
+<input type="file" id="ofile" accept=".html,.htm,text/html" multiple hidden>
+<script>
+/* ════════════════════════════════════════════════
+   칠판 열기(개인용) — 드라이브 공유 폴더의 수업용 파일을 여는 페이지
+   Apps Script 웹 앱(Code.gs)에서 JSONP로 목록·파일을 받아 이 화면 안에서만 띄움.
+   어디에도 남기지 않음 (새로 고치거나 닫으면 받은 파일도 사라짐)
+   전자칠판 크롬 69에서 돌게 ES5만 씀 (fetch·화살표 함수·flex gap 안 씀)
+   ════════════════════════════════════════════════ */
+var GAS = String(window.GAS_URL || '').replace(/^\s+|\s+$/g, '');
+var GAS_BAD = !GAS ? 'empty' : /\/dev(\?|$)/.test(GAS) ? 'dev' : !/^https:\/\/script\.google\.com\/\S+\/exec$/.test(GAS) ? 'url' : '';
+
+var ST = { mode: 'drive', id: '', path: [], data: null, err: '', busy: false };   // mode: 'drive' | 'local'(USB)
+var FC = {};    // 폴더 목록 기억 { 폴더id: { d, at } } ('' = 공유 폴더)
+var SC = {};    // 폴더마다 스크롤 위치
+var SEQ = 0;    // 폴더 요청 번호 (늦게 온 옛 응답 무시용)
+var HC = {}, HQ = [];   // 받은 파일 기억 { 파일id: { u, html } } + 오래된 순서
+var HC_MAX = 8, HC_CHARS = 30000000;   // 최대 8개·3천만 자까지만 기억 (전자칠판 메모리 보호)
+var FSEQ = 0;   // 파일 요청 번호
+var VIEW = 0;   // 수업 화면이 떠 있는지
+var OF = [];    // USB에서 연 파일 [{ name, html, info }]
+
+var OIC = {
+  book: '<path d="M3 5.5c2.6-1 5.6-.9 9 1v13c-3.4-1.9-6.4-2-9-1Z"/><path d="M21 5.5c-2.6-1-5.6-.9-9 1v13c3.4-1.9 6.4-2 9-1Z"/>',
+  folder: '<path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-3H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/>',
+  full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  warn: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
+  usb: '<path d="M9 2h6v5H9z"/><path d="M6.5 7h11v8.5a5.5 5.5 0 0 1-11 0z"/>',
+  cloud: '<path d="M17.5 19H7a5 5 0 1 1 1.1-9.88A6 6 0 0 1 19.5 11a4 4 0 0 1-2 8z"/>',
+  chev: '<path d="m9 6 6 6-6 6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>'
+};
+function oic(n, s, w) { return '<svg class="ic" width="' + (s || 20) + '" height="' + (s || 20) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 2) + '" stroke-linecap="round" stroke-linejoin="round">' + (OIC[n] || '') + '</svg>'; }
+function oesc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function o$(s) { return document.querySelector(s); }
+function oFullOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function oFullOk() { var d = document.documentElement; return !!(d.requestFullscreen || d.webkitRequestFullscreen); }
+function oFull() {
+  var d = document, el = d.documentElement;
+  try {
+    if (oFullOn()) { if (d.exitFullscreen) d.exitFullscreen(); else if (d.webkitExitFullscreen) d.webkitExitFullscreen(); }
+    else if (el.requestFullscreen) { var p = el.requestFullscreen(); if (p && p.catch) p.catch(function () {}); }
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch (e) {}
+}
+function oToast(msg) {
+  var t = o$('#otoast');
+  t.innerHTML = msg; t.className = 'otoast on';
+  clearTimeout(oToast.tm);
+  oToast.tm = setTimeout(function () { t.className = 'otoast'; }, 4200);
+}
+function sEl() { return document.scrollingElement || document.documentElement; }
+function fKey() { return ST.mode === 'local' ? '#usb' : 'f:' + (ST.id || ''); }
+function keepScroll() { SC[fKey()] = sEl().scrollTop; }
+function backScroll() { sEl().scrollTop = SC[fKey()] || 0; }
+
+/* ───────── 드라이브 연결 (JSONP: script 태그로 불러 크롬 69·리디렉션에도 안전) ───────── */
+var JP = 0;
+function noop() {}
+function oErr(code, msg) { var e = new Error(msg || code); e.code = code; return e; }
+function oMsg(e) {
+  var c = e && e.code;
+  if (c === 'NET') return '드라이브에 연결하지 못했어요. 인터넷 연결, 학교망에서 script.google.com이 막혀 있는지, 웹 앱 액세스 권한이 \'모든 사용자\'인지 확인해 주세요.';
+  if (c === 'BAD') return '드라이브 연결 응답을 읽지 못했어요. 웹 앱을 배포할 때 액세스 권한을 \'모든 사용자\'로 골랐는지 확인해 주세요.';
+  if (c === 'TIME') return '응답이 너무 늦어요. 잠시 뒤 다시 시도해 주세요.';
+  return (e && e.message) || '알 수 없는 오류가 났어요.';
+}
+function oCall(q, ms) {
+  return new Promise(function (ok, no) {
+    var cb = 'oJp' + (++JP) + 't' + Date.now(), s = document.createElement('script'), done = false, tm = 0, a = [], k;
+    function fin(err, d) {
+      if (done) return;
+      done = true;
+      clearTimeout(tm);
+      window[cb] = noop;   // 늦게 도착해도 오류가 나지 않게 빈 함수로 남김
+      s.onload = s.onerror = null;
+      if (s.parentNode) s.parentNode.removeChild(s);
+      if (err) no(err); else ok(d);
+    }
+    window[cb] = function (d) {
+      if (d && d.ok) fin(null, d);
+      else fin(oErr('SRV', d && d.error));
+    };
+    s.onerror = function () { fin(oErr('NET')); };
+    s.onload = function () { fin(oErr('BAD')); };   // 실행은 됐는데 응답 함수가 안 불림 = 로그인 화면 같은 엉뚱한 응답
+    tm = setTimeout(function () { fin(oErr('TIME')); }, ms || 60000);
+    for (k in q) if (q.hasOwnProperty(k) && q[k] != null && q[k] !== '') a.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]));
+    a.push('cb=' + cb, '_=' + Date.now());
+    s.src = GAS + (GAS.indexOf('?') < 0 ? '?' : '&') + a.join('&');
+    document.head.appendChild(s);
+  });
+}
+
+/* ───────── 폴더 ───────── */
+function oSig(d) { return JSON.stringify([d.name, d.folders, d.files]); }
+function oGo(id, name) {
+  keepScroll();
+  SEQ++;
+  ST.mode = 'drive'; ST.busy = false; ST.err = '';
+  if (GAS_BAD) { oDraw(); backScroll(); return; }
+  var c = FC[id || ''], cur = ST.path || [], path = [], i;
+  if (c) {
+    ST.id = c.d.id; ST.path = c.d.path || []; ST.data = c.d;
+    oDraw(); backScroll();
+    if (Date.now() - c.at > 30000) oLoad(ST.id, 'bg');   // 30초가 지났으면 조용히 다시 확인
+    return;
+  }
+  for (i = 0; i < cur.length; i++) if (cur[i].id === id) { path = cur.slice(0, i + 1); break; }
+  if (!path.length && id && name) path = cur.concat([{ id: id, name: name }]);
+  ST.id = id || ''; ST.path = path; ST.data = null;
+  oDraw(); backScroll();
+  oLoad(ST.id, 'nav');
+}
+/* how: 'nav' 처음 여는 폴더 · 'bg' 조용히 다시 확인 · 'manual' [새로 고침] */
+function oLoad(id, how) {
+  var my = SEQ;
+  ST.busy = true; oFab();
+  oCall(id ? { a: 'list', id: id } : { a: 'list' }, 100000).then(function (d) {
+    d.folders = d.folders || []; d.files = d.files || []; d.path = d.path || [{ id: d.id, name: d.name }];
+    var rec = { d: d, at: Date.now() };
+    FC[d.id] = rec;
+    if (!id || d.path.length === 1) FC[''] = rec;
+    if (my !== SEQ || ST.mode !== 'drive') return;
+    var same = ST.data && oSig(ST.data) === oSig(d), y = sEl().scrollTop;
+    ST.busy = false; ST.err = ''; ST.id = d.id; ST.path = d.path; ST.data = d;
+    if (same) oFab(); else { oDraw(); sEl().scrollTop = how === 'nav' ? (SC[fKey()] || 0) : y; }
+    if (d.more) oToast(oic('warn', 18) + '<span>파일이 많아 일부는 번호·제목을 아직 못 읽었어요. 잠시 뒤 [새로 고침]을 눌러 주세요.</span>');
+    else if (how === 'manual') oToast(oic('check', 18) + '<span>' + (same ? '바뀐 파일이 없어요' : '새로 고쳤어요') + '</span>');
+  }, function (e) {
+    if (my !== SEQ || ST.mode !== 'drive') return;
+    ST.busy = false;
+    if (how !== 'nav' && ST.data) {   // 이미 보이는 목록은 그대로 두고 알리기만
+      oFab();
+      if (how === 'manual') oToast(oic('warn', 18) + '<span>' + oesc(oMsg(e)) + '</span>');
+      return;
+    }
+    ST.err = oMsg(e); oDraw();
+  });
+}
+function oRefresh() {
+  if (ST.mode !== 'drive' || GAS_BAD || ST.busy) return;
+  SEQ++;
+  if (ST.data) { oLoad(ST.id, 'manual'); return; }
+  ST.err = ''; oDraw(); oLoad(ST.id, 'nav');
+}
+function oUp() {
+  if (ST.mode === 'local') { oGo(ST.id || '', ''); return; }
+  var p = ST.path || [];
+  if (p.length > 1) oGo(p[p.length - 2].id, p[p.length - 2].name);
+}
+
+/* ───────── 파일 ───────── */
+function oCard(id) {
+  var fs = (ST.data && ST.data.files) || [], i;
+  for (i = 0; i < fs.length; i++) if (fs[i].id === id) return fs[i];
+  return null;
+}
+function oKeep(id) { var i = HQ.indexOf(id); if (i >= 0) HQ.splice(i, 1); HQ.push(id); }
+function oPut(id, u, html) {
+  var tot = 0, i, k;
+  HC[id] = { u: u, html: html };
+  oKeep(id);
+  for (i = 0; i < HQ.length; i++) tot += HC[HQ[i]].html.length;
+  while (HQ.length > 1 && (HQ.length > HC_MAX || tot > HC_CHARS)) { k = HQ.shift(); tot -= HC[k].html.length; delete HC[k]; }
+}
+function oFetch1(id, prog) {
+  return oCall({ a: 'file', id: id, part: 0 }, 120000).then(function (d) {
+    var n = +d.parts || 1, got = [d.html || ''], cnt = 1, jobs = [], i;
+    if (n <= 1) return { u: d.u, html: got[0] };   // 작은 파일 (또는 나눠 보내기 전 Code.gs)
+    prog(1, n);
+    function one(k) {
+      return oCall({ a: 'file', id: id, part: k }, 120000).then(function (x) {
+        if (x.u !== d.u) throw oErr('CHANGED');
+        got[k] = x.html || ''; cnt++; prog(cnt, n);
+      });
+    }
+    for (i = 1; i < n; i++) jobs.push(one(i));
+    return Promise.all(jobs).then(function () { return { u: d.u, html: got.join('') }; });
+  });
+}
+function oFetch(id, prog) {
+  return oFetch1(id, prog).then(null, function (e) {   // 받는 사이에 파일이 바뀌었으면 한 번만 다시 받음
+    if (e && e.code === 'CHANGED') return oFetch1(id, prog);
+    throw e;
+  });
+}
+function oFile(id) {
+  var card = oCard(id), c = HC[id], my = ++FSEQ;
+  if (c && (!card || c.u === card.u)) { oKeep(id); oWaitOff(); oShow(c.html); return; }
+  oWait(card ? [card.num, card.t].filter(function (x) { return x; }).join(' · ') : '파일');
+  oFetch(id, function (n, t) { if (my === FSEQ) oWaitProg(n, t); }).then(function (r) {
+    if (my !== FSEQ) return;
+    oPut(id, r.u, r.html);
+    oWaitOff();
+    oShow(r.html);
+  }, function (e) {
+    if (my !== FSEQ) return;
+    oWaitErr(oMsg(e), id);
+  });
+}
+function oWait(title) {
+  var w = o$('#owait');
+  w.innerHTML = '<div class="wbox"><span class="spin"></span><b>' + oesc(title) + '</b><span class="wsub" id="wsub">파일을 받는 중이에요</span>' +
+    '<em>이미지가 많은 파일은 조금 걸려요</em><div class="nbtn"><button class="btn" data-o="wclose">' + oic('x', 18, 2.2) + '취소</button></div></div>';
+  w.className = 'owait on';
+}
+function oWaitProg(n, t) { var s = o$('#wsub'); if (s) s.textContent = '파일을 받는 중이에요 · ' + n + ' / ' + t; }
+function oWaitErr(msg, id) {
+  var w = o$('#owait');
+  w.innerHTML = '<div class="wbox">' + oic('warn', 40, 2) + '<b>파일을 열지 못했어요</b><span class="wsub">' + oesc(msg) + '</span>' +
+    '<div class="nbtn"><button class="btn" data-o="file" data-id="' + oesc(id) + '">' + oic('refresh', 18, 2.2) + '다시 시도</button>' +
+    '<button class="btn" data-o="wclose">' + oic('x', 18, 2.2) + '닫기</button></div></div>';
+  w.className = 'owait on';
+}
+function oWaitOff() { var w = o$('#owait'); w.className = 'owait'; w.innerHTML = ''; }
+
+/* 수업 화면 띄우기 (USB 파일도 같은 방식) */
+function oShow(html) {
+  var host = '<script>window.WSB_HOST={close:"파일 닫기"};<\/script>', v = o$('#oview');
+  html = String(html || '').replace(/^\uFEFF/, '');
+  html = html.replace(/<head(\s[^>]*)?>/i, function (m) { return m + host; });
+  keepScroll();
+  VIEW = 1;
+  v.innerHTML = '<iframe allow="fullscreen" allowfullscreen></iframe>';
+  v.className = 'oview on';
+  v.firstChild.srcdoc = html;
+  setTimeout(function () { try { v.firstChild.contentWindow.focus(); } catch (e) {} }, 300);
+}
+function oHide() {
+  var v = o$('#oview');
+  if (!VIEW) return;
+  VIEW = 0;
+  v.className = 'oview';
+  v.innerHTML = '';
+  oDraw(); backScroll();
+}
+
+/* ───────── USB 파일 (예비) ───────── */
+function oInfo(html) {
+  var m = /<script type="application\/json" id="wsb-data">([\s\S]*?)<\/script>/.exec(html);
+  if (!m) return null;
+  try {
+    var d = JSON.parse(m[1]);
+    if (!d || !d.items || !d.items.length) return null;
+    var nums = d.items.map(function (x) { return x.num; }).filter(function (x) { return x; });
+    return { kind: d.kind, round: d.round || '', grade: d.grade || '', n: d.items.length, nums: nums, first: d.items[0] };
+  } catch (e) { return null; }
+}
+function oRead(file) {
+  return new Promise(function (ok) {
+    var r = new FileReader();
+    r.onload = function () { ok({ name: file.name, html: String(r.result || '') }); };
+    r.onerror = function () { ok({ name: file.name, html: '' }); };
+    r.readAsText(file, 'utf-8');
+  });
+}
+function oAdd(files) {
+  files = [].slice.call(files || []);
+  if (!files.length) return;
+  var before = OF.length;
+  Promise.all(files.map(oRead)).then(function (list) {
+    var bad = [], added = 0;
+    list.forEach(function (f) {
+      var info = oInfo(f.html);
+      if (!info) { bad.push(f.name); return; }
+      var rec = { name: f.name, html: f.html, info: info }, at = -1;
+      OF.forEach(function (x, i) { if (x.name === f.name) at = i; });
+      if (at >= 0) OF[at] = rec; else OF.push(rec);
+      added++;
+    });
+    if (bad.length) oToast(oic('warn', 18) + '<span>학습지 만들기의 수업용 파일이 아니에요 · ' + oesc(bad.join(', ')) + '</span>');
+    if (!added) return;
+    if (ST.mode !== 'local') { keepScroll(); SEQ++; ST.mode = 'local'; ST.busy = false; }
+    oDraw(); backScroll();
+    if (!before && OF.length === 1) oShow(OF[0].html);
+  });
+}
+
+/* ───────── 화면 그리기 ───────── */
+var OCOL = (window.Intl && Intl.Collator) ? new Intl.Collator('ko', { numeric: true }) : null;
+function oCmp(a, b) { a = String(a || ''); b = String(b || ''); return OCOL ? OCOL.compare(a, b) : (a < b ? -1 : a > b ? 1 : 0); }
+function oNum(s) { var m = /\d+/.exec(String(s || '')); return m ? +m[0] : 1e9; }
+function oSortFile(a, b) {   // 회차 전체 먼저, 그다음 문항 번호순
+  return ((a.k === 'round' ? 0 : 1) - (b.k === 'round' ? 0 : 1)) || (oNum(a.num) - oNum(b.num)) || oCmp(a.name, b.name);
+}
+function oCardHtml(num, round, title, sub, fname, attr, pend) {
+  return '<button class="card' + (pend ? ' pend' : '') + '" ' + attr + '><span class="ct"><span class="num' + (round ? ' sm' : '') + '">' + oesc(num) + '</span>' +
+    (round ? '<span class="chip">회차 전체</span>' : '') + '</span><b class="ttl">' + oesc(title) + '</b><span class="sub">' + oesc(sub) + '</span><span class="fn">' + oesc(fname) + '</span></button>';
+}
+function oDriveHtml() {
+  var d = ST.data, p = ST.path || [], cur = p.length ? p[p.length - 1].name : (d ? d.name : ''), h, i, fo, fi;
+  h = '<section class="lst"><div class="lh"><div class="lhl">';
+  if (p.length > 1) {
+    h += '<nav class="crumb">';
+    for (i = 0; i < p.length - 1; i++) h += '<button data-o="go" data-id="' + oesc(p[i].id) + '" data-n="' + oesc(p[i].name) + '">' + oesc(p[i].name) + '</button><i>' + oic('chev', 16, 2.2) + '</i>';
+    h += '</nav>';
+  } else h += '<small>드라이브 공유 폴더</small>';
+  h += '<h1>' + oesc(cur || '드라이브') + '</h1></div>';
+  if (d) h += '<small class="cnt">' + (d.folders.length ? '폴더 ' + d.folders.length + ' · ' : '') + '파일 ' + d.files.length + '</small>';
+  h += '</div>';
+  if (ST.err) {
+    h += '<div class="note bad">' + oic('warn', 40, 2) + '<b>폴더를 열지 못했어요</b><span>' + oesc(ST.err) + '</span>' +
+      '<div class="nbtn"><button class="btn" data-o="refresh">' + oic('refresh', 18, 2.2) + '다시 시도</button>' +
+      '<button class="btn" data-o="pick">' + oic('usb', 18, 2) + 'USB 파일 열기</button></div></div>';
+  } else if (!d) {
+    h += '<div class="note"><span class="spin"></span><b>폴더를 여는 중이에요</b><em>처음 여는 폴더는 파일을 읽느라 조금 걸려요</em></div>';
+  } else {
+    fo = d.folders.slice().sort(function (a, b) { return oCmp(a.name, b.name); });
+    fi = d.files.slice().sort(oSortFile);
+    if (fo.length) {
+      h += (fi.length ? '<h2 class="sh">폴더</h2>' : '') + '<div class="fgrid">' + fo.map(function (f) {
+        return '<button class="fold" data-o="go" data-id="' + oesc(f.id) + '" data-n="' + oesc(f.name) + '"><span class="fic">' + oic('folder', 24, 2) + '</span><b>' + oesc(f.name) + '</b>' + oic('chev', 22, 2.2) + '</button>';
+      }).join('') + '</div>';
+    }
+    if (fi.length) {
+      h += (fo.length ? '<h2 class="sh">수업용 파일</h2>' : '') + '<div class="grid">' + fi.map(function (f) {
+        var attr = 'data-o="file" data-id="' + oesc(f.id) + '"';
+        if (!f.k) return oCardHtml('', false, f.t || f.name, '새로 고침하면 번호·제목이 보여요', f.name, attr, true);
+        return oCardHtml(f.num, f.k === 'round', f.t, f.s, f.name, attr);
+      }).join('') + '</div>';
+    }
+    if (!fo.length && !fi.length) {
+      h += '<div class="note">' + oic('folder', 40, 2) + '<b>수업용 파일이 없어요</b><span>학습지 만들기에서 수업용으로 저장한 파일(.html)만 보여요. 방금 올렸다면 [새로 고침]을 눌러 주세요.</span></div>';
+    }
+    h += '<div class="lock">' + oic('lock', 17) + '<span>파일은 이 화면 안에서만 열어요. 전자칠판에 저장되지 않고, 화면을 닫으면 남지 않아요.</span></div>';
+  }
+  return h + '</section>';
+}
+function oLocalHtml() {
+  return '<section class="lst"><div class="lh"><div class="lhl"><small>USB에서 연 파일</small><h1>수업용 파일 ' + OF.length + '개</h1></div>' +
+    '<button class="btn" data-o="pick">' + oic('plus', 20, 2.2) + '파일 더 열기</button></div><div class="grid">' +
+    OF.map(function (f, i) {
+      var I = f.info, round = I.kind === 'round';
+      var lo = I.nums[0] || '', hi = I.nums[I.nums.length - 1] || '';
+      var num = round ? (lo && hi && lo !== hi ? lo + '~' + hi : lo) : I.first.num || '';
+      var title = round ? I.round : I.first.title;
+      var sub = round ? '회차 전체 · 지문 ' + I.n + '개' : [I.first.round, I.first.type].filter(function (x) { return x; }).join(' · ');
+      return oCardHtml(num, round, title, sub, f.name, 'data-o="lopen" data-v="' + i + '"');
+    }).join('') + '</div><div class="lock">' + oic('lock', 17) + '<span>이 목록은 지금 화면에만 있어요. 화면을 닫거나 새로 고치면 사라지고, 전자칠판에 남지 않아요.</span></div></section>';
+}
+function oSetupHtml() {
+  var t = GAS_BAD === 'dev' ? ['테스트용 주소가 들어 있어요', '<code>…/dev</code>로 끝나는 주소는 로그인해야 열려요. Apps Script의 [배포 → 배포 관리]에서 <code>…/exec</code>로 끝나는 웹 앱 주소를 복사해 넣어 주세요.'] :
+    GAS_BAD === 'url' ? ['웹 앱 주소가 아니에요', '<code>GAS_URL</code>에는 <code>https://script.google.com/</code>으로 시작하고 <code>/exec</code>로 끝나는 Apps Script 웹 앱 주소를 넣어 주세요.'] :
+    ['드라이브 연결 주소가 비어 있어요', '이 파일을 편집기로 열고, 맨 위 <code>GAS_URL</code> 따옴표 안에 Apps Script 웹 앱 주소(<code>…/exec</code>)를 붙여 넣어 주세요. 그동안은 USB 파일로 열 수 있어요.'];
+  return '<section class="hero"><h1>' + t[0] + '</h1><p>' + t[1] + '</p><button class="big" data-o="pick">' + oic('usb', 28, 2.2) + 'USB 파일 열기</button></section>';
+}
+function oTop() {
+  var fb = o$('#ofull'), ok = oFullOk();
+  fb.innerHTML = ok ? oic(oFullOn() ? 'shrink' : 'full', 20) + (oFullOn() ? '전체 화면 끝' : '전체 화면') : '';
+  fb.style.display = ok ? '' : 'none';
+}
+function oFab() {
+  var h = '';
+  if (ST.mode === 'local') h = '<button class="fb" data-o="up">' + oic(GAS_BAD ? 'up' : 'cloud', 26, 2.2) + '<span>' + (GAS_BAD ? '처음으로' : '드라이브') + '</span></button>';
+  else if (!GAS_BAD) {
+    h = '<button class="fb' + ((ST.path || []).length > 1 ? '' : ' off') + '" data-o="up">' + oic('up', 26, 2.2) + '<span>위로</span></button>' +
+      '<button class="fb' + (ST.busy ? ' run' : '') + '" data-o="refresh">' + oic('refresh', 26, 2.2) + '<span>' + (ST.busy ? '확인 중' : '새로 고침') + '</span></button>';
+  }
+  o$('#ofab').innerHTML = h;
+}
+function oDraw() {
+  o$('#omain').innerHTML = ST.mode === 'local' ? oLocalHtml() : GAS_BAD ? oSetupHtml() : oDriveHtml();
+  oTop(); oFab();
+}
+
+/* ───────── 누르기 (손가락은 떼는 순간 바로) ───────── */
+function oTap(t) {
+  var el = t && t.closest ? t.closest('[data-o]') : null;
+  if (!el) return;
+  var a = el.getAttribute('data-o'), id = el.getAttribute('data-id');
+  if (a === 'pick') { var fi = o$('#ofile'); fi.value = ''; fi.click(); }
+  else if (a === 'full') oFull();
+  else if (a === 'go') oGo(id, el.getAttribute('data-n'));
+  else if (a === 'file') oFile(id);
+  else if (a === 'lopen') { var f = OF[+el.getAttribute('data-v')]; if (f) oShow(f.html); }
+  else if (a === 'up') oUp();
+  else if (a === 'refresh') oRefresh();
+  else if (a === 'wclose') { FSEQ++; oWaitOff(); }
+}
+function oBind() {
+  var TAP = null, last = 0, doc = document;
+  doc.addEventListener('touchstart', function (e) { var t = e.touches[0]; TAP = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, at: Date.now(), el: e.target } : null; }, { passive: true });
+  doc.addEventListener('touchmove', function (e) { var t = e.touches[0]; if (TAP && t && (Math.abs(t.clientX - TAP.x) > 12 || Math.abs(t.clientY - TAP.y) > 12)) TAP = null; }, { passive: true });
+  doc.addEventListener('touchend', function (e) {
+    var tp = TAP; TAP = null;
+    if (!tp || e.touches.length || Date.now() - tp.at > 700 || !tp.el.closest || !tp.el.closest('[data-o]')) return;
+    if (e.cancelable) e.preventDefault();
+    last = Date.now();
+    oTap(tp.el);
+  }, { passive: false });
+  doc.addEventListener('click', function (e) { if (Date.now() - last < 600) return; oTap(e.target); });
+  o$('#ofile').addEventListener('change', function () { oAdd(this.files); });
+  doc.addEventListener('dragover', function (e) { e.preventDefault(); });
+  doc.addEventListener('drop', function (e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.files) oAdd(e.dataTransfer.files); });
+  window.addEventListener('message', function (e) { if (e.data && e.data.wsb === 'close') oHide(); });
+  doc.addEventListener('fullscreenchange', oTop);
+  doc.addEventListener('webkitfullscreenchange', oTop);
+  doc.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' && e.keyCode !== 27) return;
+    if (VIEW) oHide();
+    else if (o$('#owait').className.indexOf('on') >= 0) { FSEQ++; oWaitOff(); }
+  });
+}
+function bootOpen() {
+  o$('#omark').innerHTML = oic('book', 18, 2.3);
+  o$('#ousb').innerHTML = oic('usb', 19, 2) + 'USB 파일';
+  oBind();
+  if (GAS_BAD) oDraw(); else oGo('', '');
+}
+
+bootOpen();
+</script>
+</body>
+</html>
