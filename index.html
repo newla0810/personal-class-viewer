@@ -198,9 +198,42 @@ function fKey() { return ST.mode === 'local' ? '#usb' : 'f:' + (ST.id || ''); }
 function keepScroll() { SC[fKey()] = sEl().scrollTop; }
 function backScroll() { sEl().scrollTop = SC[fKey()] || 0; }
 
-/* ───────── 드라이브 연결 (JSONP: script 태그로 불러 크롬 69·리디렉션에도 안전) ───────── */
-var JP = 0;
+/* ───────── 드라이브 연결 ─────────
+   1순위 XHR: 구글 로그인 쿠키를 싣지 않고 부름(시크릿 창과 같음) → 여러 계정에 로그인한 PC에서도 안전
+   2순위 JSONP(script 태그): XHR이 막힌 환경 대비. 한 번 되는 쪽을 기억해 다음부터 그쪽으로 바로 부름 */
+var JP = 0, TR = '';   // TR: 'xhr' | 'jsonp' (되는 방식)
 function noop() {}
+function oUrl(q, extra) {
+  var a = [], k;
+  for (k in q) if (q.hasOwnProperty(k) && q[k] != null && q[k] !== '') a.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]));
+  if (extra) a.push(extra);
+  a.push('_=' + Date.now());
+  return GAS + (GAS.indexOf('?') < 0 ? '?' : '&') + a.join('&');
+}
+function oCall(q, ms) {
+  if (TR === 'jsonp') return oJsonp(q, ms);
+  return oXhr(q, ms).then(function (d) { TR = 'xhr'; return d; }, function (e) {
+    if (e && (e.code === 'SRV' || e.code === 'TIME')) throw e;   // 웹 앱이 답한 오류·시간 초과는 그대로 알림
+    return oJsonp(q, ms).then(function (d) { TR = 'jsonp'; return d; });
+  });
+}
+function oXhr(q, ms) {
+  return new Promise(function (ok, no) {
+    var x = new XMLHttpRequest(), done = false;
+    function fin(err, d) { if (done) return; done = true; if (err) no(err); else ok(d); }
+    x.open('GET', oUrl(q), true);   // withCredentials 기본값 false → 쿠키 없이
+    x.timeout = ms || 60000;
+    x.onload = function () {
+      var d = null;
+      if (x.status !== 200) { fin(oErr('BAD')); return; }
+      try { d = JSON.parse(x.responseText); } catch (e) { fin(oErr('BAD')); return; }
+      if (d && d.ok) fin(null, d); else fin(oErr('SRV', d && d.error));
+    };
+    x.onerror = function () { fin(oErr('NET')); };
+    x.ontimeout = function () { fin(oErr('TIME')); };
+    x.send();
+  });
+}
 function oErr(code, msg) { var e = new Error(msg || code); e.code = code; return e; }
 function oMsg(e) {
   var c = e && e.code;
@@ -209,9 +242,9 @@ function oMsg(e) {
   if (c === 'TIME') return '응답이 너무 늦어요. 잠시 뒤 다시 시도해 주세요.';
   return (e && e.message) || '알 수 없는 오류가 났어요.';
 }
-function oCall(q, ms) {
+function oJsonp(q, ms) {
   return new Promise(function (ok, no) {
-    var cb = 'oJp' + (++JP) + 't' + Date.now(), s = document.createElement('script'), done = false, tm = 0, a = [], k;
+    var cb = 'oJp' + (++JP) + 't' + Date.now(), s = document.createElement('script'), done = false, tm = 0;
     function fin(err, d) {
       if (done) return;
       done = true;
@@ -228,9 +261,7 @@ function oCall(q, ms) {
     s.onerror = function () { fin(oErr('NET')); };
     s.onload = function () { fin(oErr('BAD')); };   // 실행은 됐는데 응답 함수가 안 불림 = 로그인 화면 같은 엉뚱한 응답
     tm = setTimeout(function () { fin(oErr('TIME')); }, ms || 60000);
-    for (k in q) if (q.hasOwnProperty(k) && q[k] != null && q[k] !== '') a.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]));
-    a.push('cb=' + cb, '_=' + Date.now());
-    s.src = GAS + (GAS.indexOf('?') < 0 ? '?' : '&') + a.join('&');
+    s.src = oUrl(q, 'cb=' + cb);
     document.head.appendChild(s);
   });
 }
